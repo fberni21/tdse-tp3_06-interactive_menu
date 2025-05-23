@@ -47,19 +47,9 @@ extern "C" {
 
 /********************** macros ***********************************************/
 
+#define NUM_MOTORS 2
+
 /********************** typedef **********************************************/
-/* Menu Statechart - State Transition Table */
-/* 	------------------------+-----------------------+-----------------------+-----------------------+------------------------
- * 	| Current               | Event                 |                       | Next                  |                       |
- * 	| State                 | (Parameters)          | [Guard]               | State                 | Actions               |
- * 	|=======================+=======================+=======================+=======================+=======================|
- * 	| ST_MEN_XX_IDLE        | EV_MEN_MEN_ACTIVE     |                       | ST_MEN_XX_ACTIVE      |                       |
- * 	|                       |                       |                       |                       |                       |
- * 	|-----------------------+-----------------------+-----------------------+-----------------------+-----------------------|
- * 	| ST_MEN_XX_ACTIVE      | EV_MEN_MEN_IDLE       |                       | ST_MEN_XX_IDLE        |                       |
- * 	|                       |                       |                       |                       |                       |
- * 	------------------------+-----------------------+-----------------------+-----------------------+------------------------
- */
 
 /* Events to excite Task Menu */
 typedef enum task_menu_ev {EV_MEN_ENT_IDLE,
@@ -70,15 +60,33 @@ typedef enum task_menu_ev {EV_MEN_ENT_IDLE,
 						   EV_MEN_ESC_ACTIVE} task_menu_ev_t;
 
 /* State of Task Menu */
-typedef enum task_menu_st {ST_MEN_XX_IDLE,
-						   ST_MEN_XX_ACTIVE} task_menu_st_t;
+typedef enum task_menu_st {ST_MEN_MAIN,
+						   ST_MEN_SELECT_MOTOR,
+                           ST_MEN_PARAM_POWER,
+                           ST_MEN_PARAM_SPEED,
+                           ST_MEN_PARAM_SPIN,
+                           ST_MEN_MODIFY_POWER,
+                           ST_MEN_MODIFY_SPEED,
+                           ST_MEN_MODIFY_SPIN} task_menu_st_t;
 
 typedef struct
 {
-	uint32_t		tick;
-	task_menu_st_t	state;
-	task_menu_ev_t	event;
-	bool			flag;
+	uint32_t speed;
+	uint32_t spin;
+	uint32_t power;
+} motor_status_t;
+
+typedef struct
+{
+	uint32_t		  tick;
+	task_menu_st_t 	  state;
+	task_menu_ev_t	  event;
+	bool			  flag;
+	uint32_t          motor;
+	uint32_t          speed;
+	uint32_t          spin;
+	uint32_t          power;
+	motor_status_t    motor_status[NUM_MOTORS];
 } task_menu_dta_t;
 
 /********************** external data declaration ****************************/

@@ -59,9 +59,18 @@
 #define DEL_MEN_XX_MED				50ul
 #define DEL_MEN_XX_MAX				500ul
 
+#define POWER_OFF 0
+#define POWER_ON  1
+
+#define SPEED_MAX 9
+
+#define SPIN_LEFT  0
+#define SPIN_RIGHT 1
+
+
 /********************** internal data declaration ****************************/
 task_menu_dta_t task_menu_dta =
-	{DEL_MEN_XX_MIN, ST_MEN_XX_IDLE, EV_MEN_ENT_IDLE, false};
+	{DEL_MEN_XX_MIN, ST_MEN_MAIN, EV_MEN_ENT_IDLE, false, 0, 0, 0, 0, {{0}}};
 
 #define MENU_DTA_QTY	(sizeof(task_menu_dta)/sizeof(task_menu_dta_t))
 
@@ -112,12 +121,6 @@ void task_menu_init(void *parameters)
 
 	displayInit( DISPLAY_CONNECTION_GPIO_4BITS );
 
-    displayCharPositionWrite(0, 0);
-	displayStringWrite("TdSE Bienvenidos");
-
-	displayCharPositionWrite(0, 1);
-	displayStringWrite("Test Nro: ");
-
 	g_task_menu_tick_cnt = G_TASK_MEN_TICK_CNT_INI;
 }
 
@@ -125,7 +128,7 @@ void task_menu_update(void *parameters)
 {
 	task_menu_dta_t *p_task_menu_dta;
 	bool b_time_update_required = false;
-	char menu_str[8];
+	char menu_str[17];
 
 	/* Update Task Menu Counter */
 	g_task_menu_cnt++;
@@ -163,10 +166,6 @@ void task_menu_update(void *parameters)
 		}
 		else
 		{
-			snprintf(menu_str, sizeof(menu_str), "%lu", (g_task_menu_cnt/1000ul));
-			displayCharPositionWrite(10, 1);
-			displayStringWrite(menu_str);
-
 			p_task_menu_dta->tick = DEL_MEN_XX_MAX;
 
 			if (true == any_event_task_menu())
@@ -177,30 +176,234 @@ void task_menu_update(void *parameters)
 
 			switch (p_task_menu_dta->state)
 			{
-				case ST_MEN_XX_IDLE:
+				case ST_MEN_MAIN:
+
+
+					for (uint32_t motor_idx = 0; motor_idx < NUM_MOTORS; motor_idx++)
+					{
+						const char *motor_power = p_task_menu_dta->motor_status[motor_idx].power == 0 ? "OFF" : " ON";
+						char        motor_spin  = p_task_menu_dta->motor_status[motor_idx].spin == SPIN_LEFT ? 'L' : 'R';
+						uint32_t    motor_speed = p_task_menu_dta->motor_status[motor_idx].speed;
+
+						snprintf(menu_str, sizeof(menu_str), "Motor %lu: %s,%lu,%c", motor_idx + 1, motor_power, motor_speed, motor_spin);
+						displayCharPositionWrite(0, motor_idx);
+						displayStringWrite(menu_str);
+					}
 
 					if ((true == p_task_menu_dta->flag) && (EV_MEN_ENT_ACTIVE == p_task_menu_dta->event))
 					{
 						p_task_menu_dta->flag = false;
-						p_task_menu_dta->state = ST_MEN_XX_ACTIVE;
+						p_task_menu_dta->state = ST_MEN_SELECT_MOTOR;
+						p_task_menu_dta->motor = 0;
+						p_task_menu_dta->spin = 0;
+						p_task_menu_dta->power = 0;
+						p_task_menu_dta->speed = 0;
 					}
 
 					break;
 
-				case ST_MEN_XX_ACTIVE:
+				case ST_MEN_SELECT_MOTOR:
 
-					if ((true == p_task_menu_dta->flag) && (EV_MEN_ENT_IDLE == p_task_menu_dta->event))
+					displayCharPositionWrite(0, 0);
+					displayStringWrite("ENT / NEX / ESC ");
+
+					uint32_t motor = p_task_menu_dta->motor;
+
+					displayCharPositionWrite(0, 1);
+					snprintf(menu_str, sizeof(menu_str), "   > Motor %lu    ", motor + 1);
+					displayStringWrite(menu_str);
+
+					if ((true == p_task_menu_dta->flag) && (EV_MEN_ENT_ACTIVE == p_task_menu_dta->event))
 					{
 						p_task_menu_dta->flag = false;
-						p_task_menu_dta->state = ST_MEN_XX_IDLE;
+						p_task_menu_dta->state = ST_MEN_PARAM_POWER;
+					} else if ((true == p_task_menu_dta->flag) && (EV_MEN_NEX_ACTIVE == p_task_menu_dta->event))
+					{
+						p_task_menu_dta->flag = false;
+						p_task_menu_dta->motor = (p_task_menu_dta->motor + 1) % NUM_MOTORS;
+					} else if ((true == p_task_menu_dta->flag) && (EV_MEN_ESC_ACTIVE == p_task_menu_dta->event))
+					{
+						p_task_menu_dta->flag = false;
+						p_task_menu_dta->state = ST_MEN_MAIN;
+					}
+
+					break;
+
+				case ST_MEN_PARAM_POWER:
+
+					displayCharPositionWrite(0, 0);
+					displayStringWrite("ENT / NEX / ESC ");
+
+					displayCharPositionWrite(0, 1);
+					displayStringWrite("    > Power     ");
+
+					if ((true == p_task_menu_dta->flag) && (EV_MEN_ENT_ACTIVE == p_task_menu_dta->event))
+					{
+						p_task_menu_dta->flag = false;
+						p_task_menu_dta->state = ST_MEN_MODIFY_POWER;
+					} else if ((true == p_task_menu_dta->flag) && (EV_MEN_NEX_ACTIVE == p_task_menu_dta->event))
+					{
+						p_task_menu_dta->flag = false;
+						p_task_menu_dta->state = ST_MEN_PARAM_SPEED;
+					} else if ((true == p_task_menu_dta->flag) && (EV_MEN_ESC_ACTIVE == p_task_menu_dta->event))
+					{
+						p_task_menu_dta->flag = false;
+						p_task_menu_dta->state = ST_MEN_SELECT_MOTOR;
+					}
+
+					break;
+
+				case ST_MEN_PARAM_SPEED:
+
+					displayCharPositionWrite(0, 0);
+					displayStringWrite("ENT / NEX / ESC ");
+
+					displayCharPositionWrite(0, 1);
+					displayStringWrite("    > Speed     ");
+
+					if ((true == p_task_menu_dta->flag) && (EV_MEN_ENT_ACTIVE == p_task_menu_dta->event))
+					{
+						p_task_menu_dta->flag = false;
+						p_task_menu_dta->state = ST_MEN_MODIFY_SPEED;
+					} else if ((true == p_task_menu_dta->flag) && (EV_MEN_NEX_ACTIVE == p_task_menu_dta->event))
+					{
+						p_task_menu_dta->flag = false;
+						p_task_menu_dta->state = ST_MEN_PARAM_SPIN;
+					} else if ((true == p_task_menu_dta->flag) && (EV_MEN_ESC_ACTIVE == p_task_menu_dta->event))
+					{
+						p_task_menu_dta->flag = false;
+						p_task_menu_dta->state = ST_MEN_SELECT_MOTOR;
+					}
+
+					break;
+
+				case ST_MEN_PARAM_SPIN:
+
+					displayCharPositionWrite(0, 0);
+					displayStringWrite("ENT / NEX / ESC ");
+
+					displayCharPositionWrite(0, 1);
+					displayStringWrite("    > Spin      ");
+
+					if ((true == p_task_menu_dta->flag) && (EV_MEN_ENT_ACTIVE == p_task_menu_dta->event))
+					{
+						p_task_menu_dta->flag = false;
+						p_task_menu_dta->state = ST_MEN_MODIFY_SPIN;
+					} else if ((true == p_task_menu_dta->flag) && (EV_MEN_NEX_ACTIVE == p_task_menu_dta->event))
+					{
+						p_task_menu_dta->flag = false;
+						p_task_menu_dta->state = ST_MEN_PARAM_POWER;
+					} else if ((true == p_task_menu_dta->flag) && (EV_MEN_ESC_ACTIVE == p_task_menu_dta->event))
+					{
+						p_task_menu_dta->flag = false;
+						p_task_menu_dta->state = ST_MEN_SELECT_MOTOR;
+					}
+
+					break;
+
+				case ST_MEN_MODIFY_POWER:
+
+					displayCharPositionWrite(0, 0);
+					displayStringWrite("ENT / NEX / ESC ");
+
+					const char *power = p_task_menu_dta->power == 0 ? "OFF" : " ON";
+
+					displayCharPositionWrite(0, 1);
+					snprintf(menu_str, sizeof(menu_str), "     > %s    ", power);
+					displayStringWrite(menu_str);
+
+					if ((true == p_task_menu_dta->flag) && (EV_MEN_ENT_ACTIVE == p_task_menu_dta->event))
+					{
+						p_task_menu_dta->flag = false;
+						p_task_menu_dta->state = ST_MEN_MAIN;
+
+						uint32_t motor_idx = p_task_menu_dta->motor;
+
+						p_task_menu_dta->motor_status[motor_idx].power = p_task_menu_dta->power;
+						p_task_menu_dta->motor_status[motor_idx].speed = p_task_menu_dta->speed;
+						p_task_menu_dta->motor_status[motor_idx].spin = p_task_menu_dta->spin;
+					} else if ((true == p_task_menu_dta->flag) && (EV_MEN_NEX_ACTIVE == p_task_menu_dta->event))
+					{
+						p_task_menu_dta->flag = false;
+						p_task_menu_dta->power = (p_task_menu_dta->power + 1) % 2;
+					} else if ((true == p_task_menu_dta->flag) && (EV_MEN_ESC_ACTIVE == p_task_menu_dta->event))
+					{
+						p_task_menu_dta->flag = false;
+						p_task_menu_dta->state = ST_MEN_PARAM_POWER;
+					}
+
+					break;
+
+				case ST_MEN_MODIFY_SPEED:
+
+					displayCharPositionWrite(0, 0);
+					displayStringWrite("ENT / NEX / ESC ");
+
+					uint32_t speed = p_task_menu_dta->speed;
+
+					displayCharPositionWrite(0, 1);
+					snprintf(menu_str, sizeof(menu_str), "      > %lu       ", speed);
+					displayStringWrite(menu_str);
+
+					if ((true == p_task_menu_dta->flag) && (EV_MEN_ENT_ACTIVE == p_task_menu_dta->event))
+					{
+						p_task_menu_dta->flag = false;
+						p_task_menu_dta->state = ST_MEN_MAIN;
+
+						uint32_t motor_idx = p_task_menu_dta->motor;
+
+						p_task_menu_dta->motor_status[motor_idx].power = p_task_menu_dta->power;
+						p_task_menu_dta->motor_status[motor_idx].speed = p_task_menu_dta->speed;
+						p_task_menu_dta->motor_status[motor_idx].spin = p_task_menu_dta->spin;
+					} else if ((true == p_task_menu_dta->flag) && (EV_MEN_NEX_ACTIVE == p_task_menu_dta->event))
+					{
+						p_task_menu_dta->flag = false;
+						p_task_menu_dta->speed = (p_task_menu_dta->speed + 1) % (SPEED_MAX + 1);
+					} else if ((true == p_task_menu_dta->flag) && (EV_MEN_ESC_ACTIVE == p_task_menu_dta->event))
+					{
+						p_task_menu_dta->flag = false;
+						p_task_menu_dta->state = ST_MEN_PARAM_SPEED;
+					}
+
+					break;
+
+				case ST_MEN_MODIFY_SPIN:
+
+					displayCharPositionWrite(0, 0);
+					displayStringWrite("ENT / NEX / ESC ");
+
+					const char *spin = p_task_menu_dta->spin == SPIN_LEFT ? " LEFT" : "RIGHT";
+
+					displayCharPositionWrite(0, 1);
+					snprintf(menu_str, sizeof(menu_str), "    > %s     ", spin);
+					displayStringWrite(menu_str);
+
+					if ((true == p_task_menu_dta->flag) && (EV_MEN_ENT_ACTIVE == p_task_menu_dta->event))
+					{
+						p_task_menu_dta->flag = false;
+						p_task_menu_dta->state = ST_MEN_MAIN;
+
+						uint32_t motor_idx = p_task_menu_dta->motor;
+
+						p_task_menu_dta->motor_status[motor_idx].power = p_task_menu_dta->power;
+						p_task_menu_dta->motor_status[motor_idx].speed = p_task_menu_dta->speed;
+						p_task_menu_dta->motor_status[motor_idx].spin = p_task_menu_dta->spin;
+					} else if ((true == p_task_menu_dta->flag) && (EV_MEN_NEX_ACTIVE == p_task_menu_dta->event))
+					{
+						p_task_menu_dta->flag = false;
+						p_task_menu_dta->spin = (p_task_menu_dta->spin + 1) % 2;
+					} else if ((true == p_task_menu_dta->flag) && (EV_MEN_ESC_ACTIVE == p_task_menu_dta->event))
+					{
+						p_task_menu_dta->flag = false;
+						p_task_menu_dta->state = ST_MEN_PARAM_SPIN;
 					}
 
 					break;
 
 				default:
 
-					p_task_menu_dta->tick  = DEL_MEN_XX_MIN;
-					p_task_menu_dta->state = ST_MEN_XX_IDLE;
+					p_task_menu_dta->tick  = DEL_MEN_XX_MAX;
+					p_task_menu_dta->state = ST_MEN_MAIN;
 					p_task_menu_dta->event = EV_MEN_ENT_IDLE;
 					p_task_menu_dta->flag  = false;
 
